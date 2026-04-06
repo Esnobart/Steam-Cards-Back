@@ -22,31 +22,31 @@ namespace SteamCards
 		{
 			while (!stoppingToken.IsCancellationRequested)
 			{
-					using var scope = _sp.CreateScope();
-					var db = scope.ServiceProvider.GetRequiredService<IMongoDatabase>();
-					var store = scope.ServiceProvider.GetRequiredService<StoreCheckService>();
-					var importer = scope.ServiceProvider.GetRequiredService<CardImportService>();
-					var setBuilder = scope.ServiceProvider.GetRequiredService<SetCollectionService>();
+				using var scope = _sp.CreateScope();
+				var db = scope.ServiceProvider.GetRequiredService<IMongoDatabase>();
+				var store = scope.ServiceProvider.GetRequiredService<StoreCheckService>();
+				var importer = scope.ServiceProvider.GetRequiredService<CardImportService>();
+				var setBuilder = scope.ServiceProvider.GetRequiredService<SetCollectionService>();
 
-					var games = db.GetCollection<Games>("games");
-					var now = DateTime.UtcNow;
+				var games = db.GetCollection<Games>("games");
+				var now = DateTime.UtcNow;
 
-					var filter = Builders<Games>.Filter.And(
-						Builders<Games>.Filter.Lte(g => g.FailCount, 10),
-						Builders<Games>.Filter.Or(
-							Builders<Games>.Filter.Eq(g => g.Status, "new"),
+				var filter = Builders<Games>.Filter.And(
+					Builders<Games>.Filter.Lte(g => g.FailCount, 10),
+					Builders<Games>.Filter.Or(
+						Builders<Games>.Filter.Eq(g => g.Status, "new"),
 
-							Builders<Games>.Filter.And(
-								Builders<Games>.Filter.In(g => g.Status, new[] { "store_throttled", "market_throttled" }),
-								Builders<Games>.Filter.Lte(g => g.NextRetryAtUtc, now)
+						Builders<Games>.Filter.And(
+							Builders<Games>.Filter.In(g => g.Status, new[] { "store_throttled", "market_throttled" }),
+							Builders<Games>.Filter.Lte(g => g.NextRetryAtUtc, now)
+					),
+						Builders<Games>.Filter.And(
+							Builders<Games>.Filter.Eq(g => g.Status, "no_cards"),
+							Builders<Games>.Filter.Lte(g => g.NextRetryAtUtc, now)
 						),
-							Builders<Games>.Filter.And(
-								Builders<Games>.Filter.Eq(g => g.Status, "no_cards"),
-								Builders<Games>.Filter.Lte(g => g.NextRetryAtUtc, now)
-							),
-							Builders<Games>.Filter.Eq(g => g.Status, "cards_possible")
-						)
-					);
+						Builders<Games>.Filter.Eq(g => g.Status, "cards_possible")
+					)
+				);
 
 					var batch = await games.Find(filter).SortBy(g => g.AppId).Limit(5).ToListAsync(stoppingToken);
 
@@ -90,7 +90,7 @@ namespace SteamCards
 										cancellationToken: stoppingToken
 									);
 
-									await Task.Delay(Random.Shared.Next(1500, 2500), stoppingToken);
+									await Task.Delay(Random.Shared.Next(3000, 5000), stoppingToken);
 									continue;
 								}
 
@@ -109,7 +109,7 @@ namespace SteamCards
 									cancellationToken: stoppingToken
 								);
 
-									await Task.Delay(Random.Shared.Next(1500, 2500), stoppingToken);
+									await Task.Delay(Random.Shared.Next(3000, 5000), stoppingToken);
 									continue;
 								}
 
@@ -144,7 +144,7 @@ namespace SteamCards
 								cancellationToken: stoppingToken
 								);
 
-								await Task.Delay(Random.Shared.Next(2000, 3500), stoppingToken);
+								await Task.Delay(Random.Shared.Next(4000, 7000), stoppingToken);
 								continue;
 							}
 
@@ -162,7 +162,7 @@ namespace SteamCards
 									cancellationToken: stoppingToken
 								);
 
-								await Task.Delay(Random.Shared.Next(800, 1400), stoppingToken);
+								await Task.Delay(Random.Shared.Next(2000, 3000), stoppingToken);
 								continue;
 							}
 
@@ -178,7 +178,7 @@ namespace SteamCards
 							);
 
 							await setBuilder.BuildSetAsync(g.AppId);
-							await Task.Delay(Random.Shared.Next(800, 1400), stoppingToken);
+							await Task.Delay(Random.Shared.Next(2000, 3000), stoppingToken);
 						}
 						catch (Exception ex)
 						{
@@ -193,7 +193,7 @@ namespace SteamCards
 								cancellationToken: stoppingToken
 							);
 
-							await Task.Delay(Random.Shared.Next(1500, 2500), stoppingToken);
+							await Task.Delay(Random.Shared.Next(3000, 5000), stoppingToken);
 						}
 					}
 			}	
