@@ -14,6 +14,9 @@ namespace SteamCards.Services
 		{
 			_httpClient = httpClient;
 			_cards = database.GetCollection<Cards>("cards");
+
+			_httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
+				"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36");
 		}
 
 		private async Task<decimal?> GetPriceAsync(string marketHashName)
@@ -158,7 +161,7 @@ namespace SteamCards.Services
 					else
 						normalImported++;
 
-					await Task.Delay(Random.Shared.Next(1200, 2000));
+					await Task.Delay(Random.Shared.Next(3000, 5000));
 				}
 
 				start += pageSize;
@@ -166,7 +169,7 @@ namespace SteamCards.Services
 				if (start >= totalCount)
 					break;
 
-				await Task.Delay(Random.Shared.Next(1200, 2000));
+				await Task.Delay(Random.Shared.Next(3000, 5000));
 			}
 
 			return new ImportCardsResult
