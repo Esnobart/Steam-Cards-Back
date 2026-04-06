@@ -113,7 +113,7 @@ app.MapPost("/admin/games/seed-range", async (int from, int to, IMongoDatabase d
 app.MapPost("/admin/test/{appId:int}", async (int appId, CardImportService importer) =>
 {
 	var result = await importer.ImportForGameAsync(appId);
-	return Results.Success ? Results.Ok(result) : Results.StatusCode(429);
+	return Results.Ok(result);
 });
 
 // 404 handler (аналог app.use((_, res) => ...))
