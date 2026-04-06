@@ -49,8 +49,10 @@ builder.Services.AddHttpClient<StoreCheckService>(client =>
 builder.Services.AddHttpClient<CardImportService>(client =>
 {
 	client.DefaultRequestHeaders.UserAgent.ParseAdd(
-		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) SteamCardsApp/1.0"
-	);
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36");
+
+	client.DefaultRequestHeaders.Accept.ParseAdd(
+		"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
 	client.Timeout = TimeSpan.FromSeconds(15);
 });
 builder.Services.AddHostedService<CatalogWorker>();
