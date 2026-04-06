@@ -69,6 +69,10 @@ app.UseCors();
 // JSON body parsing — в .NET оно уже встроено для Controllers
 app.MapControllers();
 
+app.MapGet("/", () => "SteamCards API running");
+
+app.MapGet("/health", () => Results.Ok("OK"));
+
 app.MapPost("/admin/games/seed-range", async (int from, int to, IMongoDatabase db) =>
 {
 	if (from <= 0 || to < from)
