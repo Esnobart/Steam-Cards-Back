@@ -11,7 +11,7 @@ namespace SteamCards
 		private static readonly TimeSpan NoCardsRecheckAfter = TimeSpan.FromDays(30);
 		private static readonly TimeSpan ThrottleRetryAfter = TimeSpan.FromMinutes(30);
 		private static readonly TimeSpan MarketThrottleRetryAfter = TimeSpan.FromHours(2);
-		private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(10);
+		private static readonly TimeSpan IdleDelay = TimeSpan.FromMinutes(1);
 
 		public CatalogWorker(IServiceProvider sp)
 		{
@@ -109,7 +109,7 @@ namespace SteamCards
 									cancellationToken: stoppingToken
 								);
 
-									await Task.Delay(Random.Shared.Next(3000, 5000), stoppingToken);
+									await Task.Delay(Random.Shared.Next(1000, 2000), stoppingToken);
 									continue;
 								}
 
@@ -162,7 +162,7 @@ namespace SteamCards
 									cancellationToken: stoppingToken
 								);
 
-								await Task.Delay(Random.Shared.Next(2000, 3000), stoppingToken);
+								await Task.Delay(Random.Shared.Next(1000, 1500), stoppingToken);
 								continue;
 							}
 
@@ -178,7 +178,7 @@ namespace SteamCards
 							);
 
 							await setBuilder.BuildSetAsync(g.AppId);
-							await Task.Delay(Random.Shared.Next(2000, 3000), stoppingToken);
+							await Task.Delay(Random.Shared.Next(1000, 1500), stoppingToken);
 						}
 						catch (Exception ex)
 						{

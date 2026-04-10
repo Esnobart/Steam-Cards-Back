@@ -55,7 +55,7 @@ builder.Services.AddHttpClient<CardImportService>(client =>
 		"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
 	client.Timeout = TimeSpan.FromSeconds(15);
 });
-//builder.Services.AddHostedService<CatalogWorker>();
+builder.Services.AddHostedService<CatalogWorker>();
 builder.Services.AddScoped<CardsService>();
 builder.Services.AddScoped<SetCollectionService>();
 
