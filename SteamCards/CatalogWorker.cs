@@ -129,7 +129,7 @@ namespace SteamCards
 
 							try
 							{
-								importResult = await importer.ImportForGameAsync(g.AppId);
+								importResult = await importer.ImportForGameAsync(g.AppId, stoppingToken);
 							}
 							catch (Exception ex)
 							{

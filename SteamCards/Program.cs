@@ -7,10 +7,8 @@ using SteamCards.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Controllers (как routes + controllers в express)
 builder.Services.AddControllers();
 
-// CORS (аналог cors())
 builder.Services.AddCors(options =>
 {
 	options.AddDefaultPolicy(p => p
@@ -29,7 +27,6 @@ builder.Services.AddSingleton<IMongoDatabase>(sp =>
 	return client.GetDatabase(dbName);
 });
 
-// Services 
 builder.Services.AddHttpLogging();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<SteamMarketService>(client =>
@@ -62,13 +59,20 @@ builder.Services.AddScoped<SetCollectionService>();
 
 var app = builder.Build();
 
-// Logger (аналог morgan)
+app.UseExceptionHandler(errorApp =>
+{
+	errorApp.Run(async context =>
+	{
+		context.Response.StatusCode = 500;
+		context.Response.ContentType = "application/json";
+		await context.Response.WriteAsJsonAsync(new { message = "Server error" });
+	});
+});
+
 app.UseHttpLogging();
 
-// CORS
 app.UseCors();
 
-// JSON body parsing — в .NET оно уже встроено для Controllers
 app.MapControllers();
 
 app.MapGet("/", () => "SteamCards API running");
@@ -110,27 +114,12 @@ app.MapPost("/admin/games/seed-range", async (int from, int to, IMongoDatabase d
 	return Results.Ok(new { inserted = to - from + 1 });
 });
 
-app.MapPost("/admin/test/{appId:int}", async (int appId, CardImportService importer) =>
+app.MapPost("/admin/test/{appId:int}", async (int appId, CardImportService importer, CancellationToken cancellationToken) =>
 {
 	var result = await importer.ImportForGameAsync(appId);
 	return Results.Ok(result);
 });
 
-// 404 handler (аналог app.use((_, res) => ...))
-// В ASP.NET Core обычно 404 возвращается автоматически,
-// но можно сделать "красивый" JSON на fallback:
 app.MapFallback(() => Results.Json(new { message = "Route not found" }, statusCode: 404));
-
-// Global error handler (аналог твоего app.use((err, req, res, next) => ...))
-app.UseExceptionHandler(errorApp =>
-{
-	errorApp.Run(async context =>
-	{
-		// Можно расширить, но оставим как у тебя: status + message
-		context.Response.StatusCode = 500;
-		context.Response.ContentType = "application/json";
-		await context.Response.WriteAsJsonAsync(new { message = "Server error" });
-	});
-});
 
 app.Run();
