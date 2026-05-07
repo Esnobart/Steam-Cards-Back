@@ -18,7 +18,7 @@ namespace SteamCards.Services
 			var encodedName = Uri.EscapeDataString(marketHashName);
 			var url = $"https://steamcommunity.com/market/priceoverview/?appid=753&currency={currency}&country=UA&language=english&market_hash_name={encodedName}";
 
-			var resp = await _httpClient.GetAsync(url);
+			using var resp = await _httpClient.GetAsync(url);
 			var body = await resp.Content.ReadAsStringAsync();
 
 			Console.WriteLine($"[Steam] {resp.StatusCode} {url}");

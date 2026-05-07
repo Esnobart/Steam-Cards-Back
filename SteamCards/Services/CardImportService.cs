@@ -1,5 +1,6 @@
 ﻿using MongoDB.Driver;
 using SteamCards.Models;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -18,10 +19,10 @@ namespace SteamCards.Services
 
 		private async Task<decimal?> GetPriceAsync(string marketHashName)
 		{
-			var url = 
+			var url =
 				$"https://steamcommunity.com/market/priceoverview/?appid=753&currency=18&country=UA&language=english&market_hash_name={Uri.EscapeDataString(marketHashName)}";
 
-			var resp = await _httpClient.GetAsync(url);
+			using var resp = await _httpClient.GetAsync(url);
 
 			if (!resp.IsSuccessStatusCode)
 				return null;
@@ -30,27 +31,43 @@ namespace SteamCards.Services
 			
 			using var doc = JsonDocument.Parse(body);
 
-			if (!doc.RootElement.TryGetProperty("lowest_price", out var PriceEl))
+			if (!doc.RootElement.TryGetProperty("lowest_price", out var priceEl))
 				return null;
 
-			var priceText = PriceEl.GetString();
+			var priceText = priceEl.GetString();
 
-			if (string.IsNullOrEmpty(priceText))
+			if (string.IsNullOrWhiteSpace(priceText))
 				return null;
 
-			priceText = priceText.Replace("₴", "").Trim();
+			var cleanPrice = new string(priceText.Where(c => char.IsDigit(c) || c == '.' || c == ',').ToArray());
+			cleanPrice = cleanPrice.Replace(',', '.');
 
-			if (decimal.TryParse(priceText, out var price))
+			if (decimal.TryParse(cleanPrice, NumberStyles.Any, CultureInfo.InvariantCulture, out var price))
 				return price;
 
-				return null;
+			
+			return null;
 		}
 
 		public async Task<ImportCardsResult> ImportForGameAsync(int appId)
 		{
 			var seen = new HashSet<string>(StringComparer.Ordinal);
-			int normalImported = 0;
-			int foilImported = 0;
+
+			var normalImported = await ImportCardsBorderAsync(appId, false, seen);
+			var foilImported = await ImportCardsBorderAsync(appId, true, seen);
+
+			return new ImportCardsResult
+			{
+				NormalImported = normalImported,
+				FoilImported = foilImported,
+			}
+		};
+
+
+		private async Task<int> ImportCardsBorderAsync(int appId, bool isFoilExpected, HashSet<string> seen)
+		{
+			var imported = 0;
+			var cardBorder = isFoilExpected ? 1 : 0;
 
 			for (int start = 0; ;)
 			{
@@ -59,6 +76,7 @@ namespace SteamCards.Services
 					$"appid=753&currency=18&country=UA&norender=1&count=50&start={start}" +
 					$"&category_753_Game%5B0%5D=tag_app_{appId}" +
 					$"&category_753_item_class%5B0%5D=tag_item_class_2" +
+					$"&category_753_cardborder%5B0%5D=tag_cardborder_{cardBorder}" +
 					$"&q=&l=english";
 
 				using var resp = await _httpClient.GetAsync(url);
@@ -87,9 +105,9 @@ namespace SteamCards.Services
 				{
 					string? marketHashName = null;
 					string? cardName = null;
-					string? GameName = null;
+					string? gameName = null;
 					string? priceText = null;
-					bool isFoil = false;
+					bool isFoil = isFoilExpected;
 
 					if (item.TryGetProperty("asset_description", out var asset))
 					{
@@ -99,7 +117,7 @@ namespace SteamCards.Services
 						if (asset.TryGetProperty("type", out var type))
 						{
 							isFoil = type.GetString()?.Contains("Foil", StringComparison.OrdinalIgnoreCase) == true;
-							GameName = Regex.Replace(type.GetString() ?? "", @"\s+(Foil\s+)?Trading Card$", "", RegexOptions.IgnoreCase).Trim();
+							gameName = Regex.Replace(type.GetString() ?? "", @"\s+(Foil\s+)?Trading Card$", "", RegexOptions.IgnoreCase).Trim();
 						}
 					}
 
@@ -119,7 +137,7 @@ namespace SteamCards.Services
 
 					if (!seen.Add(marketHashName))
 						continue;
-					
+
 					if (item.TryGetProperty("name", out var name))
 						cardName = name.GetString();
 
@@ -137,7 +155,7 @@ namespace SteamCards.Services
 					var card = new Cards
 					{
 						AppId = appId,
-						GameName = GameName,
+						GameName = gameName,
 						MarketHashName = marketHashName,
 						CardName = cardName,
 						Price = price,
@@ -146,34 +164,26 @@ namespace SteamCards.Services
 						CreatedAtUtc = DateTime.UtcNow
 					};
 
-
 					await _cards.ReplaceOneAsync(
 						c => c.MarketHashName == marketHashName,
 						card,
 						new ReplaceOptions { IsUpsert = true }
 					);
 
-					if (isFoil)
-						foilImported++;
-					else
-						normalImported++;
+					imported++;
 
 					await Task.Delay(Random.Shared.Next(1000, 1500));
 				}
 
 				start += pageSize;
- 
+
 				if (start >= totalCount)
 					break;
 
 				await Task.Delay(Random.Shared.Next(1500, 2000));
 			}
 
-			return new ImportCardsResult
-			{
-				NormalImported = normalImported,
-				FoilImported = foilImported
-			};
+			return imported;
 		}
 	}
 }
