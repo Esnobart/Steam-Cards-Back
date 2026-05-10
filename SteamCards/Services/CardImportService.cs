@@ -147,8 +147,7 @@ namespace SteamCards.Services
 
 					cardName ??= marketHashName;
 
-					decimal? price = ParsePrice(priceText);
-					price ??= await GetPriceAsync(marketHashName, cancellationToken);
+					decimal? price = await GetPriceAsync(marketHashName, cancellationToken);
 
 					var prefix = $"{appId}-";
 					if (cardName.StartsWith(prefix))
