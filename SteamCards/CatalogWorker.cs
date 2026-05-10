@@ -8,11 +8,6 @@ namespace SteamCards
 	{
 		private readonly IServiceProvider _sp;
 
-		private static readonly TimeSpan NoCardsRecheckAfter = TimeSpan.FromDays(30);
-		private static readonly TimeSpan ThrottleRetryAfter = TimeSpan.FromMinutes(30);
-		private static readonly TimeSpan MarketThrottleRetryAfter = TimeSpan.FromHours(2);
-		private static readonly TimeSpan IdleDelay = TimeSpan.FromMinutes(1);
-
 		public CatalogWorker(IServiceProvider sp)
 		{
 			_sp = sp;
@@ -41,12 +36,12 @@ namespace SteamCards
 					)
 				);
 
-					var batch = await games.Find(filter).SortBy(g => g.AppId).Limit(5).ToListAsync(stoppingToken);
+					var batch = await games.Find(filter).SortBy(g => g.AppId).Limit(1).ToListAsync(stoppingToken);
 
 					if (batch.Count == 0)
 					{
 						Console.WriteLine("No games to process.");
-						await Task.Delay(IdleDelay, stoppingToken);
+						await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
 						continue;
 					}
 
@@ -66,9 +61,9 @@ namespace SteamCards
 
 							try
 							{
-							importResult = await importer.ImportForGameAsync(g.AppId, cancellationToken: stoppingToken); 
+							    importResult = await importer.ImportForGameAsync(g.AppId, cancellationToken: stoppingToken); 
 							}
-							catch (Exception ex)
+							catch (SteamThrottledException ex)
 							{
 								Console.WriteLine($"[MARKET] AppId {g.AppId} throttled: {ex.Message}");
 
@@ -77,12 +72,13 @@ namespace SteamCards
 								Builders<Games>.Update
 									.Inc(g => g.FailCount, 1)
 									.Set(g => g.Status, "market_throttled")
-									.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.Add(MarketThrottleRetryAfter)),
+									.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.AddHours(2)),
 								cancellationToken: stoppingToken
 								);
 
 								await Task.Delay(Random.Shared.Next(4000, 7000), stoppingToken);
-								continue;
+							    await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
+							    break;
 							}
 
 							var normalImported = importResult.NormalImported;
@@ -94,7 +90,7 @@ namespace SteamCards
 								await games.UpdateOneAsync(
 									x => x.AppId == g.AppId,
 									Builders<Games>.Update
-										.Set(g => g.Status, "cards_possible")
+										.Set(g => g.Status, "no_cards")
 										.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.AddHours(6)),
 									cancellationToken: stoppingToken
 								);
@@ -115,7 +111,7 @@ namespace SteamCards
 							);
 
 							await setBuilder.BuildSetAsync(g.AppId);
-							await Task.Delay(Random.Shared.Next(1000, 1500), stoppingToken);
+							await Task.Delay(Random.Shared.Next(5000, 10000), stoppingToken);
 						}
 						catch (Exception ex)
 						{
@@ -131,7 +127,7 @@ namespace SteamCards
 							);
 
 							await Task.Delay(Random.Shared.Next(3000, 5000), stoppingToken);
-						}
+					    }
 					}
 			}	
 		}

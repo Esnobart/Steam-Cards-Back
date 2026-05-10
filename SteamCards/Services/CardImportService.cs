@@ -38,6 +38,9 @@ namespace SteamCards.Services
 
 			using var resp = await _httpClient.GetAsync(url, cancellationToken);
 
+			if ((int)resp.StatusCode is 429 or 403)
+				throw new SteamThrottledException((int)resp.StatusCode);
+
 			if (!resp.IsSuccessStatusCode)
 				return null;
 
@@ -87,7 +90,7 @@ namespace SteamCards.Services
 				var body = await resp.Content.ReadAsStringAsync(cancellationToken);
 
 				if ((int)resp.StatusCode is 429 or 403)
-					throw new Exception($"Steam throttled {(int)resp.StatusCode}");
+					throw new SteamThrottledException((int)resp.StatusCode);
 
 				if (!resp.IsSuccessStatusCode)
 					throw new Exception($"Steam HTTP {(int)resp.StatusCode}");
@@ -182,7 +185,7 @@ namespace SteamCards.Services
 					else
 						result.NormalImported++;
 
-					await Task.Delay(Random.Shared.Next(1000, 1500), cancellationToken);
+					await Task.Delay(Random.Shared.Next(3000, 5000), cancellationToken);
 				}
 
 				start += pageSize;
@@ -190,7 +193,7 @@ namespace SteamCards.Services
 				if (start >= totalCount)
 					break;
 
-				await Task.Delay(Random.Shared.Next(1500, 2000), cancellationToken);
+				await Task.Delay(Random.Shared.Next(4000, 7000), cancellationToken);
 			}
 
 			return result;

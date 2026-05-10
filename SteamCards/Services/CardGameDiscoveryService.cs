@@ -61,10 +61,13 @@ namespace SteamCards.Services
 					}
 				}
 
+				steamTotal = total;
+				pages++;
+
 				if (start + 100 > total) 
 					break;
 
-				await Task.Delay(2000, ct);
+				await Task.Delay(5000, ct);
 			}
 
 			return new CardGameDiscoveryResult
