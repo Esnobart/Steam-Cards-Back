@@ -17,25 +17,8 @@ namespace SteamCards.Services
 			_cards = database.GetCollection<Cards>("cards");
 		}
 
-		private async Task<decimal?> GetPriceAsync(string marketHashName)
+		private static decimal? ParsePrice(string? priceText)
 		{
-			var url =
-				$"https://steamcommunity.com/market/priceoverview/?appid=753&currency=18&country=UA&language=english&market_hash_name={Uri.EscapeDataString(marketHashName)}";
-
-			using var resp = await _httpClient.GetAsync(url);
-
-			if (!resp.IsSuccessStatusCode)
-				return null;
-
-			var body = await resp.Content.ReadAsStringAsync();
-			
-			using var doc = JsonDocument.Parse(body);
-
-			if (!doc.RootElement.TryGetProperty("lowest_price", out var priceEl))
-				return null;
-
-			var priceText = priceEl.GetString();
-
 			if (string.IsNullOrWhiteSpace(priceText))
 				return null;
 
@@ -45,43 +28,63 @@ namespace SteamCards.Services
 			if (decimal.TryParse(cleanPrice, NumberStyles.Any, CultureInfo.InvariantCulture, out var price))
 				return price;
 
-			
 			return null;
 		}
 
-		public async Task<ImportCardsResult> ImportForGameAsync(int appId)
+		private async Task<decimal?> GetPriceAsync(string marketHashName, CancellationToken cancellationToken = default)
 		{
+			var url =
+				$"https://steamcommunity.com/market/priceoverview/?appid=753&currency=18&country=UA&language=english&market_hash_name={Uri.EscapeDataString(marketHashName)}";
+
+			using var resp = await _httpClient.GetAsync(url, cancellationToken);
+
+			if (!resp.IsSuccessStatusCode)
+				return null;
+
+			var body = await resp.Content.ReadAsStringAsync(cancellationToken);
+			
+			using var doc = JsonDocument.Parse(body);
+
+			if (!doc.RootElement.TryGetProperty("lowest_price", out var priceEl))
+				return null;
+
+			return ParsePrice(priceEl.GetString());
+		}
+
+		public async Task<ImportCardsResult> ImportForGameAsync(
+			int appId,
+			bool? isFoilFilter = null,
+			CancellationToken cancellationToken = default)
+		{
+			return await ImportCardsAsync(appId, isFoilFilter, cancellationToken);
+		}
+
+
+		private async Task<ImportCardsResult> ImportCardsAsync(
+			int appId,
+			bool? isFoilFilter,
+			CancellationToken cancellationToken)
+		{
+			var result = new ImportCardsResult();
 			var seen = new HashSet<string>(StringComparer.Ordinal);
-
-			var normalImported = await ImportCardsBorderAsync(appId, false, seen);
-			var foilImported = await ImportCardsBorderAsync(appId, true, seen);
-
-			return new ImportCardsResult
-			{
-				NormalImported = normalImported,
-				FoilImported = foilImported,
-			}
-		};
-
-
-		private async Task<int> ImportCardsBorderAsync(int appId, bool isFoilExpected, HashSet<string> seen)
-		{
-			var imported = 0;
-			var cardBorder = isFoilExpected ? 1 : 0;
 
 			for (int start = 0; ;)
 			{
+				var cardBorderFilter = isFoilFilter.HasValue
+					? $"&category_753_cardborder%5B0%5D=tag_cardborder_{(isFoilFilter.Value ? 1 : 0)}"
+					: string.Empty;
+
 				var url =
 					"https://steamcommunity.com/market/search/render/?" +
 					$"appid=753&currency=18&country=UA&norender=1&count=50&start={start}" +
 					$"&category_753_Game%5B0%5D=tag_app_{appId}" +
 					$"&category_753_item_class%5B0%5D=tag_item_class_2" +
-					$"&category_753_cardborder%5B0%5D=tag_cardborder_{cardBorder}" +
+					cardBorderFilter +
 					$"&q=&l=english";
 
-				using var resp = await _httpClient.GetAsync(url);
+				using var resp = await _httpClient.GetAsync(url, cancellationToken);
 
-				var body = await resp.Content.ReadAsStringAsync();
+				var body = await resp.Content.ReadAsStringAsync(cancellationToken);
 
 				if ((int)resp.StatusCode is 429 or 403)
 					throw new Exception($"Steam throttled {(int)resp.StatusCode}");
@@ -107,7 +110,7 @@ namespace SteamCards.Services
 					string? cardName = null;
 					string? gameName = null;
 					string? priceText = null;
-					bool isFoil = isFoilExpected;
+					bool isFoil = isFoilFilter ?? false;
 
 					if (item.TryGetProperty("asset_description", out var asset))
 					{
@@ -116,12 +119,13 @@ namespace SteamCards.Services
 
 						if (asset.TryGetProperty("type", out var type))
 						{
-							isFoil = type.GetString()?.Contains("Foil", StringComparison.OrdinalIgnoreCase) == true;
-							gameName = Regex.Replace(type.GetString() ?? "", @"\s+(Foil\s+)?Trading Card$", "", RegexOptions.IgnoreCase).Trim();
+							var typeText = type.GetString() ?? "";
+							if (!isFoilFilter.HasValue)
+								isFoil = typeText.Contains("Foil", StringComparison.OrdinalIgnoreCase);
+
+							gameName = Regex.Replace(typeText, @"\s+(Foil\s+)?Trading Card$", "", RegexOptions.IgnoreCase).Trim();
 						}
 					}
-
-					decimal? price = await GetPriceAsync(marketHashName);
 
 					if (item.TryGetProperty("sell_price_text", out var currencyEl))
 						priceText = currencyEl.GetString();
@@ -143,6 +147,9 @@ namespace SteamCards.Services
 
 					cardName ??= marketHashName;
 
+					decimal? price = ParsePrice(priceText);
+					price ??= await GetPriceAsync(marketHashName, cancellationToken);
+
 					var prefix = $"{appId}-";
 					if (cardName.StartsWith(prefix))
 						cardName = cardName[prefix.Length..];
@@ -155,7 +162,7 @@ namespace SteamCards.Services
 					var card = new Cards
 					{
 						AppId = appId,
-						GameName = gameName,
+						GameName = gameName ?? string.Empty,
 						MarketHashName = marketHashName,
 						CardName = cardName,
 						Price = price,
@@ -167,12 +174,16 @@ namespace SteamCards.Services
 					await _cards.ReplaceOneAsync(
 						c => c.MarketHashName == marketHashName,
 						card,
-						new ReplaceOptions { IsUpsert = true }
+						new ReplaceOptions { IsUpsert = true },
+						cancellationToken
 					);
 
-					imported++;
+					if (isFoil)
+						result.FoilImported++;
+					else
+						result.NormalImported++;
 
-					await Task.Delay(Random.Shared.Next(1000, 1500));
+					await Task.Delay(Random.Shared.Next(1000, 1500), cancellationToken);
 				}
 
 				start += pageSize;
@@ -180,10 +191,10 @@ namespace SteamCards.Services
 				if (start >= totalCount)
 					break;
 
-				await Task.Delay(Random.Shared.Next(1500, 2000));
+				await Task.Delay(Random.Shared.Next(1500, 2000), cancellationToken);
 			}
 
-			return imported;
+			return result;
 		}
 	}
 }

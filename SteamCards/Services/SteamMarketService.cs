@@ -22,11 +22,12 @@ namespace SteamCards.Services
 			var body = await resp.Content.ReadAsStringAsync();
 
 			Console.WriteLine($"[Steam] {resp.StatusCode} {url}");
-			Console.WriteLine(body);
 
-			var json = await _httpClient.GetStringAsync(url);
+			if (!resp.IsSuccessStatusCode)
+				return null;
 			
-			using var doc = JsonDocument.Parse(json);
+			using var doc = JsonDocument.Parse(body);
+
 			if (!doc.RootElement.GetProperty("success").GetBoolean())
 				return null;
 

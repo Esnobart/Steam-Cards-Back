@@ -114,9 +114,9 @@ app.MapPost("/admin/games/seed-range", async (int from, int to, IMongoDatabase d
 	return Results.Ok(new { inserted = to - from + 1 });
 });
 
-app.MapPost("/admin/test/{appId:int}", async (int appId, CardImportService importer, CancellationToken cancellationToken) =>
+app.MapPost("/admin/test/{appId:int}", async (int appId, bool? isFoil, CardImportService importer, CancellationToken cancellationToken) =>
 {
-	var result = await importer.ImportForGameAsync(appId);
+	var result = await importer.ImportForGameAsync(appId, isFoil, cancellationToken);
 	return Results.Ok(result);
 });
 

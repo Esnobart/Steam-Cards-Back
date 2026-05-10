@@ -38,7 +38,7 @@ namespace SteamCards.Services
 		{
 			var items = cards.Select(c => new SetItem
 			{
-				Name = c.CardName,
+				Name = c.CardName ?? c.MarketHashName,
 				MarketHashName = c.MarketHashName,
 				Price = c.Price,
 				IsFoil = c.IsFoil,
