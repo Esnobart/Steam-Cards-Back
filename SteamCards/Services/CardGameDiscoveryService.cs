@@ -28,7 +28,7 @@ namespace SteamCards.Services
 				var root = doc.RootElement;
 
 				var total = root.GetProperty("total_count").GetInt32();
-				var html = root.GetProperty("resultы_html").GetString() ?? "";
+				var html = root.GetProperty("results_html").GetString() ?? "";
 
 				foreach (Match match in Regex.Matches(html, "data-ds-appid=\"(?<id>\\d+)\""))
 					appIds.Add(int.Parse(match.Groups["id"].Value));
