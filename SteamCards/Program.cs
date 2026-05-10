@@ -81,7 +81,8 @@ app.MapGet("/health", () => Results.Ok("OK"));
 
 app.MapPost("/admin/games/discover-card-games", async (CardGameDiscoveryService discovery, IMongoDatabase db, CancellationToken ct) =>
 {
-	var appIds = await discovery.DiscoveryService(ct);
+	var discoveryResult = await discovery.DiscoveryService(ct);
+	var appIds = discoveryResult.AppIds;
 	var games = db.GetCollection<Games>("games");
 
 	var writes = appIds.Select(appId =>
@@ -100,7 +101,11 @@ app.MapPost("/admin/games/discover-card-games", async (CardGameDiscoveryService 
 	if (writes.Count > 0)
 		await games.BulkWriteAsync(writes, cancellationToken: ct);
 
-	return Results.Ok(new { discovered = appIds.Count });
+	return Results.Ok(new {
+		steamTotal = discoveryResult.SteamTotal,
+		discovered = discoveryResult.Discovered,
+		pages = discoveryResult.Pages,
+	});
 });
 
 app.MapPost("/admin/cards/{appId:int}", async (int appId, bool? isFoil, CardImportService importer, SetCollectionService setBuilder, CancellationToken cancellationToken) =>
