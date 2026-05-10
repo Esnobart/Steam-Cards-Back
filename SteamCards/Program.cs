@@ -114,11 +114,19 @@ app.MapPost("/admin/games/seed-range", async (int from, int to, IMongoDatabase d
 	return Results.Ok(new { inserted = to - from + 1 });
 });
 
-app.MapPost("/admin/test/{appId:int}", async (int appId, bool? isFoil, CardImportService importer, CancellationToken cancellationToken) =>
+app.MapPost("/admin/cards/{appId:int}", async (int appId, bool? isFoil, CardImportService importer, SetCollectionService setBuilder, CancellationToken cancellationToken) =>
 {
 	var result = await importer.ImportForGameAsync(appId, isFoil, cancellationToken);
+	await setBuilder.BuildSetAsync(appId);
 	return Results.Ok(result);
 });
+
+app.MapPost("/admin/sets/{appId:int}", async (int appId, SetCollectionService setBuilder) =>
+{
+	var sets = await setBuilder.BuildSetAsync(appId);
+	return Results.Ok(sets);
+});
+
 
 app.MapFallback(() => Results.Json(new { message = "Route not found" }, statusCode: 404));
 
