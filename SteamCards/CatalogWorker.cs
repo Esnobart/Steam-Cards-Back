@@ -36,18 +36,26 @@ namespace SteamCards
 					)
 				);
 
-					var batch = await games.Find(filter).SortBy(g => g.AppId).Limit(1).ToListAsync(stoppingToken);
+				var batch = await games.Find(filter).SortBy(g => g.AppId).Limit(1).ToListAsync(stoppingToken);
 
-					if (batch.Count == 0)
-					{
-						Console.WriteLine("No games to process.");
-						await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
-						continue;
-					}
+				if (batch.Count == 0)
+				{
+					Console.WriteLine("No games to process.");
+					await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
+					continue;
+				}
 
 					foreach (var g in batch)
 					{
-						try
+					    var throttleDelay = g.FailCount switch
+					    {
+						    0 => TimeSpan.FromMinutes(3),
+						    1 => TimeSpan.FromMinutes(10),
+						    2 => TimeSpan.FromMinutes(30),
+						    _ => TimeSpan.FromHours(2)
+					    };
+					
+					try
 						{
 							await games.UpdateOneAsync(
 								x => x.AppId == g.AppId,
