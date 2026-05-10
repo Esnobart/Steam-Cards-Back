@@ -36,7 +36,7 @@ namespace SteamCards.Services
 				if (start + 100 > total) 
 					break;
 
-				await Task.Delay(1200, ct);
+				await Task.Delay(2000, ct);
 			}
 
 			return appIds.ToList();
