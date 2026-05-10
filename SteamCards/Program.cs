@@ -36,7 +36,7 @@ builder.Services.AddHttpClient<SteamMarketService>(client =>
 	);
 	client.Timeout = TimeSpan.FromSeconds(15);
 });
-builder.Services.AddHttpClient<StoreCheckService>(client =>
+builder.Services.AddHttpClient<CardGameDiscoveryService>(client =>
 {
 	client.DefaultRequestHeaders.UserAgent.ParseAdd(
 		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) SteamCardsApp/1.0"
@@ -79,39 +79,28 @@ app.MapGet("/", () => "SteamCards API running");
 
 app.MapGet("/health", () => Results.Ok("OK"));
 
-app.MapPost("/admin/games/seed-range", async (int from, int to, IMongoDatabase db) =>
+app.MapPost("/admin/games/discover-card-games", async (CardGameDiscoveryService discovery, IMongoDatabase db, CancellationToken ct) =>
 {
-	if (from <= 0 || to < from)
-		return Results.BadRequest(new { message = "Invalid range" });
-
+	var appIds = await discovery.DiscoveryService(ct);
 	var games = db.GetCollection<Games>("games");
 
-	var models = new List<WriteModel<Games>>();
-	for (int appId = from; appId <= to; appId++)
-	{
-		models.Add(new UpdateOneModel<Games>(
-			Builders<Games>.Filter.Eq(x => x.AppId, appId),
-			Builders<Games>.Update
-			    .Set(x => x.AppId, appId)
-				.Set(x => x.Status, "new")
-				.Set(x => x.FailCount, 0)
-				.Set(x => x.NextRetryAtUtc, null)
-				.Set(x => x.CardImportedAtUtc, null)
-				.Set(x => x.CardsImported, false)
-				.Set(x => x.HasTradableCards, false)
-		) { IsUpsert = true });
+	var writes = appIds.Select(appId =>
+	    new UpdateOneModel<Games>(
+			Builders<Games>.Filter.Eq(g => g.AppId, appId),
+		    Builders<Games>.Update
+			  .Set(g => g.AppId, appId)
+			  .Set(g => g.HasTradableCards, true)
+			  .SetOnInsert(g => g.CardsImported, false)
+			  .SetOnInsert(g => g.Status, "cards_possible")
+			  .SetOnInsert(g => g.FailCount, 0)
+	    )
+		{ IsUpsert = true }
+	).ToList();
 
-		if (models.Count >= 1000)
-		{
-			await games.BulkWriteAsync(models);
-			models.Clear();
-		}
-	}
+	if (writes.Count > 0)
+		await games.BulkWriteAsync(writes, cancellationToken: ct);
 
-	if (models.Count > 0)
-		await games.BulkWriteAsync(models);
-
-	return Results.Ok(new { inserted = to - from + 1 });
+	return Results.Ok(new { discovered = appIds.Count });
 });
 
 app.MapPost("/admin/cards/{appId:int}", async (int appId, bool? isFoil, CardImportService importer, SetCollectionService setBuilder, CancellationToken cancellationToken) =>

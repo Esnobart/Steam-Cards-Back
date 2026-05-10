@@ -24,7 +24,6 @@ namespace SteamCards
 			{
 				using var scope = _sp.CreateScope();
 				var db = scope.ServiceProvider.GetRequiredService<IMongoDatabase>();
-				var store = scope.ServiceProvider.GetRequiredService<StoreCheckService>();
 				var importer = scope.ServiceProvider.GetRequiredService<CardImportService>();
 				var setBuilder = scope.ServiceProvider.GetRequiredService<SetCollectionService>();
 
@@ -34,16 +33,10 @@ namespace SteamCards
 				var filter = Builders<Games>.Filter.And(
 					Builders<Games>.Filter.Lte(g => g.FailCount, 10),
 					Builders<Games>.Filter.Or(
-						Builders<Games>.Filter.Eq(g => g.Status, "new"),
-
 						Builders<Games>.Filter.And(
-							Builders<Games>.Filter.In(g => g.Status, new[] { "store_throttled", "market_throttled" }),
+							Builders<Games>.Filter.Eq(g => g.Status, "market_throttled"),
 							Builders<Games>.Filter.Lte(g => g.NextRetryAtUtc, now)
 					),
-						Builders<Games>.Filter.And(
-							Builders<Games>.Filter.Eq(g => g.Status, "no_cards"),
-							Builders<Games>.Filter.Lte(g => g.NextRetryAtUtc, now)
-						),
 						Builders<Games>.Filter.Eq(g => g.Status, "cards_possible")
 					)
 				);
@@ -69,67 +62,11 @@ namespace SteamCards
 								cancellationToken: stoppingToken
 							);
 
-							if (g.Status == "new" || g.Status == "store_throttled" || g.Status == "no_cards")
-							{
-								bool hasCards;
-
-								try
-								{
-									hasCards = await store.CheckAppIdExistsAsync(g.AppId, stoppingToken);
-								}
-								catch (Exception ex)
-								{
-									Console.WriteLine($"Error checking store for AppId {g.AppId}: {ex.Message}");
-
-									await games.UpdateOneAsync(
-										x => x.AppId == g.AppId,
-										Builders<Games>.Update
-											.Inc(g => g.FailCount, 1)
-											.Set(g => g.Status, "store_throttled")
-											.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.Add(ThrottleRetryAfter)),
-										cancellationToken: stoppingToken
-									);
-
-									await Task.Delay(Random.Shared.Next(3000, 5000), stoppingToken);
-									continue;
-								}
-
-								if (!hasCards)
-								{
-									Console.WriteLine($"[INFO] AppId {g.AppId} does not have tradable cards.");
-
-									await games.UpdateOneAsync(
-									x => x.AppId == g.AppId,
-									Builders<Games>.Update
-										.Set(g => g.HasTradableCards, false)
-										.Set(g => g.CardsImported, false)
-										.Set(g => g.Status, "no_cards")
-										.Set(g => g.CardImportedAtUtc, DateTime.UtcNow)
-										.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.Add(NoCardsRecheckAfter)),
-									cancellationToken: stoppingToken
-								);
-
-									await Task.Delay(Random.Shared.Next(1000, 2000), stoppingToken);
-									continue;
-								}
-
-								await games.UpdateOneAsync(
-									x => x.AppId == g.AppId,
-									Builders<Games>.Update
-										.Set(g => g.HasTradableCards, true)
-										.Set(g => g.CardsImported, true)
-										.Set(g => g.Status, "cards_possible")
-										.Set(g => g.CardImportedAtUtc, DateTime.UtcNow)
-										.Set(x => x.NextRetryAtUtc, null),
-									cancellationToken: stoppingToken
-								);
-							}
-
 							ImportCardsResult importResult;
 
 							try
 							{
-								importResult = await importer.ImportForGameAsync(g.AppId);
+							importResult = await importer.ImportForGameAsync(g.AppId, cancellationToken: stoppingToken); 
 							}
 							catch (Exception ex)
 							{
@@ -188,7 +125,7 @@ namespace SteamCards
 								x => x.AppId == g.AppId,
 								Builders<Games>.Update
 									.Inc(g => g.FailCount, 1)
-									.Set(g => g.Status, "store_throttled")
+									.Set(g => g.Status, "market_throttled")
 									.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.AddMinutes(30)),
 								cancellationToken: stoppingToken
 							);
