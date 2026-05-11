@@ -1,4 +1,4 @@
-﻿using MongoDB.Driver;
+using MongoDB.Driver;
 using SteamCards.Services;
 using SteamCards.Models;
 
@@ -20,10 +20,11 @@ namespace SteamCards
 				using var scope = _sp.CreateScope();
 
 				var db = scope.ServiceProvider.GetRequiredService<IMongoDatabase>();
+				var importer = scope.ServiceProvider.GetRequiredService<CardImportService>();
+				var setBuilder = scope.ServiceProvider.GetRequiredService<SetCollectionService>();
 				var games = db.GetCollection<Games>("games");
 
 				var now = DateTime.UtcNow;
-				var throttled = 0;
 
 				var filter = Builders<Games>.Filter.And(
 					Builders<Games>.Filter.Lte(g => g.FailCount, 10),
@@ -32,11 +33,15 @@ namespace SteamCards
 							Builders<Games>.Filter.Eq(g => g.Status, "market_throttled"),
 							Builders<Games>.Filter.Lte(g => g.NextRetryAtUtc, now)
 						),
+						Builders<Games>.Filter.And(
+							Builders<Games>.Filter.Eq(g => g.Status, "processing"),
+							Builders<Games>.Filter.Lte(g => g.NextRetryAtUtc, now)
+						),
 						Builders<Games>.Filter.Eq(g => g.Status, "cards_possible")
 					)
 				);
 
-				var batch = await games.Find(filter).SortBy(g => g.AppId).Limit(2).ToListAsync(stoppingToken);
+				var batch = await games.Find(filter).SortBy(g => g.AppId).Limit(5).ToListAsync(stoppingToken);
 
 				if (batch.Count == 0)
 				{
@@ -45,114 +50,100 @@ namespace SteamCards
 					continue;
 				}
 
-				await Parallel.ForEachAsync(
-					batch,
-					new ParallelOptions
+				foreach (var g in batch)
+				{
+					if (stoppingToken.IsCancellationRequested)
+						break;
+
+					var throttleDelay = g.FailCount switch
 					{
-						MaxDegreeOfParallelism = 2,
-						CancellationToken = stoppingToken
-					},
-					async (g, ct) =>
+						0 => TimeSpan.FromMinutes(3),
+						1 => TimeSpan.FromMinutes(10),
+						2 => TimeSpan.FromMinutes(30),
+						_ => TimeSpan.FromHours(2)
+					};
+
+					try
 					{
-						if (Volatile.Read(ref throttled) == 1)
-							return;
+						await games.UpdateOneAsync(
+							x => x.AppId == g.AppId,
+							Builders<Games>.Update
+								.Set(g => g.Status, "processing")
+								.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.AddMinutes(30)),
+							cancellationToken: stoppingToken
+						);
 
-						using var itemScope = _sp.CreateScope();
-
-						var importer = itemScope.ServiceProvider.GetRequiredService<CardImportService>();
-						var setBuilder = itemScope.ServiceProvider.GetRequiredService<SetCollectionService>();
-						var itemDb = itemScope.ServiceProvider.GetRequiredService<IMongoDatabase>();
-						var itemGames = itemDb.GetCollection<Games>("games");
-
-						var throttleDelay = g.FailCount switch
-						{
-							0 => TimeSpan.FromMinutes(3),
-							1 => TimeSpan.FromMinutes(10),
-							2 => TimeSpan.FromMinutes(30),
-							_ => TimeSpan.FromHours(2)
-						};
+						ImportCardsResult importResult;
 
 						try
 						{
-							await itemGames.UpdateOneAsync(
-								x => x.AppId == g.AppId,
-								Builders<Games>.Update
-									.Set(g => g.Status, "processing")
-									.Set(g => g.NextRetryAtUtc, null),
-								cancellationToken: ct
-							);
+							importResult = await importer.ImportForGameAsync(g.AppId, cancellationToken: stoppingToken);
+						}
+						catch (SteamThrottledException ex)
+						{
+							Console.WriteLine($"[MARKET] AppId {g.AppId} throttled: {ex.Message}");
 
-							ImportCardsResult importResult;
-
-							try
-							{
-								importResult = await importer.ImportForGameAsync(g.AppId, cancellationToken: ct);
-							}
-							catch (SteamThrottledException ex)
-							{
-								Console.WriteLine($"[MARKET] AppId {g.AppId} throttled: {ex.Message}");
-
-								await itemGames.UpdateOneAsync(
+							await games.UpdateOneAsync(
 								x => x.AppId == g.AppId,
 								Builders<Games>.Update
 									.Inc(g => g.FailCount, 1)
 									.Set(g => g.Status, "market_throttled")
 									.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.Add(throttleDelay)),
-								cancellationToken: ct
-								);
-
-								Interlocked.Exchange(ref throttled, 1);
-								return;
-							}
-
-							var normalImported = importResult.NormalImported;
-							var foilImported = importResult.FoilImported;
-
-							if (normalImported == 0 && foilImported == 0)
-							{
-								Console.WriteLine($"[INFO] No cards found for AppId {g.AppId} on market.");
-								await itemGames.UpdateOneAsync(
-									x => x.AppId == g.AppId,
-									Builders<Games>.Update
-										.Set(g => g.Status, "no_cards")
-										.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.AddHours(6)),
-									cancellationToken: ct
-								);
-
-								await Task.Delay(Random.Shared.Next(1000, 1500), ct);
-								return;
-							}
-
-							await itemGames.UpdateOneAsync(
-								x => x.AppId == g.AppId,
-								Builders<Games>.Update
-									.Set(g => g.HasTradableCards, true)
-									.Set(g => g.CardsImported, true)
-									.Set(g => g.Status, "ready")
-									.Set(g => g.CardImportedAtUtc, DateTime.UtcNow)
-									.Set(g => g.NextRetryAtUtc, null),
-								cancellationToken: ct
+								cancellationToken: stoppingToken
 							);
 
-							await setBuilder.BuildSetAsync(g.AppId);
+							await Task.Delay(throttleDelay, stoppingToken);
+							break;
 						}
-						catch (Exception ex)
+
+						var normalImported = importResult.NormalImported;
+						var foilImported = importResult.FoilImported;
+
+						if (normalImported == 0 && foilImported == 0)
 						{
-							Console.WriteLine($"Unexpected error processing AppId {g.AppId}: {ex.Message}");
-
-							await itemGames.UpdateOneAsync(
+							Console.WriteLine($"[INFO] No cards found for AppId {g.AppId} on market.");
+							await games.UpdateOneAsync(
 								x => x.AppId == g.AppId,
 								Builders<Games>.Update
-									.Inc(g => g.FailCount, 1)
-									.Set(g => g.Status, "market_throttled")
-									.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.AddMinutes(30)),
-								cancellationToken: ct
+									.Set(g => g.Status, "no_cards")
+									.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.AddHours(6)),
+								cancellationToken: stoppingToken
 							);
 
-							await Task.Delay(Random.Shared.Next(4000, 7000), ct);
+							await Task.Delay(Random.Shared.Next(1000, 1500), stoppingToken);
+							continue;
 						}
+
+						await games.UpdateOneAsync(
+							x => x.AppId == g.AppId,
+							Builders<Games>.Update
+								.Set(g => g.HasTradableCards, true)
+								.Set(g => g.CardsImported, true)
+								.Set(g => g.Status, "ready")
+								.Set(g => g.CardImportedAtUtc, DateTime.UtcNow)
+								.Set(g => g.NextRetryAtUtc, null),
+							cancellationToken: stoppingToken
+						);
+
+						await setBuilder.BuildSetAsync(g.AppId);
+						await Task.Delay(Random.Shared.Next(2000, 4000), stoppingToken);
 					}
-				);
+					catch (Exception ex)
+					{
+						Console.WriteLine($"Unexpected error processing AppId {g.AppId}: {ex.Message}");
+
+						await games.UpdateOneAsync(
+							x => x.AppId == g.AppId,
+							Builders<Games>.Update
+								.Inc(g => g.FailCount, 1)
+								.Set(g => g.Status, "market_throttled")
+								.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.AddMinutes(30)),
+							cancellationToken: stoppingToken
+						);
+
+						await Task.Delay(Random.Shared.Next(4000, 7000), stoppingToken);
+					}
+				}
 			}
 		}
 	}

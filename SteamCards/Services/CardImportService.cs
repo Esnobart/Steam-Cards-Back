@@ -17,39 +17,6 @@ namespace SteamCards.Services
 			_cards = database.GetCollection<Cards>("cards");
 		}
 
-		private static readonly SemaphoreSlim SteamRequestGate = new (1, 1);
-		private static DateTime _nextSteamRequestAtUtc = DateTime.MinValue;
-
-		private async Task<HttpResponseMessage> GetSteamAsync(string url, CancellationToken ct)
-		{
-			await SteamRequestGate.WaitAsync(ct);
-
-			try
-			{
-				var delay = _nextSteamRequestAtUtc - DateTime.UtcNow;
-				if (delay > TimeSpan.Zero)
-					await Task.Delay(delay, ct);
-
-				var resp = await _httpClient.GetAsync(url, ct);
-
-				if ((int)resp.StatusCode is 429 or 403)
-				{
-					_nextSteamRequestAtUtc = DateTime.UtcNow.AddMinutes(
-						Random.Shared.Next(10, 16)
-					);
-
-					return resp;
-				}
-
-				_nextSteamRequestAtUtc = DateTime.UtcNow.AddMilliseconds(
-					Random.Shared.Next(3000, 6000)
-				);
-
-				return resp;
-			}
-			finally { SteamRequestGate.Release(); }
-		}
-
 		//private static decimal? ParsePrice(string? priceText)
 		//{
 		//	if (string.IsNullOrWhiteSpace(priceText))
@@ -119,15 +86,12 @@ namespace SteamCards.Services
 					cardBorderFilter +
 					$"&q=&l=english";
 
-				using var resp = await GetSteamAsync(url, cancellationToken);
+				using var resp = await _httpClient.GetAsync(url, cancellationToken);
 
 				var body = await resp.Content.ReadAsStringAsync(cancellationToken);
 
-				if ((int)resp.StatusCode is 429 or 403)
-					throw new SteamThrottledException((int)resp.StatusCode);
-
 				if (!resp.IsSuccessStatusCode)
-					throw new Exception($"Steam HTTP {(int)resp.StatusCode}");
+					throw new SteamThrottledException((int)resp.StatusCode);
 
 				using var doc = JsonDocument.Parse(body);
 				var root = doc.RootElement;
@@ -235,6 +199,8 @@ namespace SteamCards.Services
 
 				if (start >= totalCount)
 					break;
+
+				await Task.Delay(Random.Shared.Next(2000, 4000), cancellationToken);
 			}
 
 			return result;
