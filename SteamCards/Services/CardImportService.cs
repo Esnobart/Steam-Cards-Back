@@ -188,8 +188,6 @@ namespace SteamCards.Services
 						result.FoilImported++;
 					else
 						result.NormalImported++;
-
-					await Task.Delay(Random.Shared.Next(3000, 5000), cancellationToken);
 				}
 
 				start += pageSize;
@@ -197,7 +195,7 @@ namespace SteamCards.Services
 				if (start >= totalCount)
 					break;
 
-				await Task.Delay(Random.Shared.Next(4000, 7000), cancellationToken);
+				await Task.Delay(Random.Shared.Next(1000, 2000), cancellationToken);
 			}
 
 			return result;
