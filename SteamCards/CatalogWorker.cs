@@ -36,7 +36,7 @@ namespace SteamCards
 					)
 				);
 
-				var batch = await games.Find(filter).SortBy(g => g.AppId).Limit(1).ToListAsync(stoppingToken);
+				var batch = await games.Find(filter).SortBy(g => g.AppId).Limit(5).ToListAsync(stoppingToken);
 
 				if (batch.Count == 0)
 				{
@@ -84,8 +84,7 @@ namespace SteamCards
 								cancellationToken: stoppingToken
 								);
 
-								await Task.Delay(Random.Shared.Next(4000, 7000), stoppingToken);
-							    await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
+							    await Task.Delay(throttleDelay, stoppingToken);
 							    break;
 							}
 
@@ -119,7 +118,7 @@ namespace SteamCards
 							);
 
 							await setBuilder.BuildSetAsync(g.AppId);
-							await Task.Delay(Random.Shared.Next(5000, 10000), stoppingToken);
+							await Task.Delay(Random.Shared.Next(2000, 4000), stoppingToken);
 						}
 						catch (Exception ex)
 						{
