@@ -32,6 +32,15 @@ namespace SteamCards.Services
 
 				var resp = await _httpClient.GetAsync(url, ct);
 
+				if ((int)resp.StatusCode is 429 or 403)
+				{
+					_nextSteamRequestAtUtc = DateTime.UtcNow.AddMinutes(
+						Random.Shared.Next(10, 16)
+					);
+
+					return resp;
+				}
+
 				_nextSteamRequestAtUtc = DateTime.UtcNow.AddMilliseconds(
 					Random.Shared.Next(3000, 6000)
 				);
