@@ -32,8 +32,8 @@ namespace SteamCards.Services
 
 				var resp = await _httpClient.GetAsync(url, ct);
 
-				_nextSteamRequestAtUtc = DateTime.UtcNow.AddMicroseconds(
-					Random.Shared.Next(2500, 5000)
+				_nextSteamRequestAtUtc = DateTime.UtcNow.AddMilliseconds(
+					Random.Shared.Next(3000, 6000)
 				);
 
 				return resp;
@@ -217,7 +217,10 @@ namespace SteamCards.Services
 				}
 
 				if (writes.Count > 0)
+				{
 					await _cards.BulkWriteAsync(writes, cancellationToken: cancellationToken);
+					writes.Clear();
+				}
 
 				start += pageSize;
 
