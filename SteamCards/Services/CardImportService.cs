@@ -113,6 +113,7 @@ namespace SteamCards.Services
 					string? cardName = null;
 					string? gameName = null;
 					string? priceText = null;
+					decimal? price = null;
 					bool isFoil = isFoilFilter ?? false;
 
 					if (item.TryGetProperty("asset_description", out var asset))
@@ -133,6 +134,9 @@ namespace SteamCards.Services
 					if (item.TryGetProperty("sell_price_text", out var currencyEl))
 						priceText = currencyEl.GetString();
 
+					if (item.TryGetProperty("sell_price", out var priceEl))
+						price = priceEl.GetInt32() / 100m;
+
 					if (string.IsNullOrWhiteSpace(marketHashName) &&
 						item.TryGetProperty("hash_name", out var hashName))
 					{
@@ -150,7 +154,7 @@ namespace SteamCards.Services
 
 					cardName ??= marketHashName;
 
-					decimal? price = await GetPriceAsync(marketHashName, cancellationToken);
+					//decimal? price = await GetPriceAsync(marketHashName, cancellationToken);
 
 					var prefix = $"{appId}-";
 					if (cardName.StartsWith(prefix))
