@@ -12,7 +12,7 @@ namespace SteamCards.Models
 		public string? CardName { get; set; }
 		public decimal? Price { get; set; }
 		public string? PriceText { get; set; }
-		public string Currency { get; set; } = "UAH";
+		public string Currency { get; set; } = "USD";
 		public bool IsFoil { get; set; }
 		public DateTime CreatedAtUtc { get; set; }
 	}

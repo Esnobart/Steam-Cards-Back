@@ -53,7 +53,7 @@ namespace SteamCards.Services
 				IsFoil = isFoil,
 				TotalCards = items.Count,
 				TotalPrice = total,		
-				Currency = "UAH",
+				Currency = "USD",
 				Url = $"https://steamcommunity.com/market/search?appid=753&category_753_Game%5B0%5D=tag_app_{appId}&category_753_item_class%5B0%5D=tag_item_class_2&l=english",
 				Items = items.OrderByDescending(i => i.Price ?? 0m).ToList()
 			};
