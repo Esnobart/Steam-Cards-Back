@@ -135,7 +135,7 @@ namespace SteamCards
 							);
 
 							await setBuilder.BuildSetAsync(g.AppId);
-							await Task.Delay(Random.Shared.Next(1000, 2000), ct);
+							await Task.Delay(Random.Shared.Next(2000, 4000), ct);
 						}
 						catch (Exception ex)
 						{

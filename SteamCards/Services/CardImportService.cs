@@ -178,6 +178,11 @@ namespace SteamCards.Services
 						CreatedAtUtc = DateTime.UtcNow
 					};
 
+					if (isFoil)
+						result.FoilImported++;
+					else
+						result.NormalImported++;
+
 					writes.Add(new ReplaceOneModel<Cards>(
 						Builders<Cards>.Filter.Eq(c => c.MarketHashName, marketHashName),
 						card
@@ -185,23 +190,20 @@ namespace SteamCards.Services
 					{
 						IsUpsert = true
 					});
-
-					if (isFoil)
-						result.FoilImported++;
-					else
-						result.NormalImported++;
 				}
 
+				if (writes.Count > 0)
+					await _cards.BulkWriteAsync(writes, cancellationToken: cancellationToken);
+
 				start += pageSize;
+
+				
 
 				if (start >= totalCount)
 					break;
 
 				await Task.Delay(Random.Shared.Next(1000, 2000), cancellationToken);
 			}
-
-			if (writes.Count > 0)
-				await _cards.BulkWriteAsync(writes, cancellationToken: cancellationToken);
 
 			return result;
 		}
