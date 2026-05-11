@@ -33,7 +33,7 @@ namespace SteamCards.Services
 				var resp = await _httpClient.GetAsync(url, ct);
 
 				_nextSteamRequestAtUtc = DateTime.UtcNow.AddMilliseconds(
-					Random.Shared.Next(4000, 7000)
+					Random.Shared.Next(3000, 6000)
 				);
 
 				return resp;
@@ -226,8 +226,6 @@ namespace SteamCards.Services
 
 				if (start >= totalCount)
 					break;
-
-				await Task.Delay(Random.Shared.Next(1000, 2000), cancellationToken);
 			}
 
 			return result;
