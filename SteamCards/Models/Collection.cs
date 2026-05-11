@@ -11,7 +11,7 @@ namespace SteamCards.Models
 
 		public int TotalCards { get; set; }
 		public decimal TotalPrice { get; set; }
-		public string Currency { get; set; } = "UAH";
+		public string Currency { get; set; } = "USD";
 		public string Url { get; set; } = null!;
 		
 		public List<SetItem> Items { get; set; } = new List<SetItem>();

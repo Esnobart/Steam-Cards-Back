@@ -17,42 +17,42 @@ namespace SteamCards.Services
 			_cards = database.GetCollection<Cards>("cards");
 		}
 
-		private static decimal? ParsePrice(string? priceText)
-		{
-			if (string.IsNullOrWhiteSpace(priceText))
-				return null;
+		//private static decimal? ParsePrice(string? priceText)
+		//{
+		//	if (string.IsNullOrWhiteSpace(priceText))
+		//		return null;
 
-			var cleanPrice = new string(priceText.Where(c => char.IsDigit(c) || c == '.' || c == ',').ToArray());
-			cleanPrice = cleanPrice.Replace(',', '.');
+		//	var cleanPrice = new string(priceText.Where(c => char.IsDigit(c) || c == '.' || c == ',').ToArray());
+		//	cleanPrice = cleanPrice.Replace(',', '.');
 
-			if (decimal.TryParse(cleanPrice, NumberStyles.Any, CultureInfo.InvariantCulture, out var price))
-				return price;
+		//	if (decimal.TryParse(cleanPrice, NumberStyles.Any, CultureInfo.InvariantCulture, out var price))
+		//		return price;
 
-			return null;
-		}
+		//	return null;
+		//}
 
-		private async Task<decimal?> GetPriceAsync(string marketHashName, CancellationToken cancellationToken = default)
-		{
-			var url =
-				$"https://steamcommunity.com/market/priceoverview/?appid=753&currency=18&country=UA&language=english&market_hash_name={Uri.EscapeDataString(marketHashName)}";
+		//private async Task<decimal?> GetPriceAsync(string marketHashName, CancellationToken cancellationToken = default)
+		//{
+		//	var url =
+		//		$"https://steamcommunity.com/market/priceoverview/?appid=753&currency=18&country=UA&language=english&market_hash_name={Uri.EscapeDataString(marketHashName)}";
 
-			using var resp = await _httpClient.GetAsync(url, cancellationToken);
+		//	using var resp = await _httpClient.GetAsync(url, cancellationToken);
 
-			if ((int)resp.StatusCode is 429 or 403)
-				throw new SteamThrottledException((int)resp.StatusCode);
+		//	if ((int)resp.StatusCode is 429 or 403)
+		//		throw new SteamThrottledException((int)resp.StatusCode);
 
-			if (!resp.IsSuccessStatusCode)
-				return null;
+		//	if (!resp.IsSuccessStatusCode)
+		//		return null;
 
-			var body = await resp.Content.ReadAsStringAsync(cancellationToken);
+		//	var body = await resp.Content.ReadAsStringAsync(cancellationToken);
 			
-			using var doc = JsonDocument.Parse(body);
+		//	using var doc = JsonDocument.Parse(body);
 
-			if (!doc.RootElement.TryGetProperty("lowest_price", out var priceEl))
-				return null;
+		//	if (!doc.RootElement.TryGetProperty("lowest_price", out var priceEl))
+		//		return null;
 
-			return ParsePrice(priceEl.GetString());
-		}
+		//	return ParsePrice(priceEl.GetString());
+		//}
 
 		public async Task<ImportCardsResult> ImportForGameAsync(
 			int appId,
@@ -69,6 +69,7 @@ namespace SteamCards.Services
 			CancellationToken cancellationToken)
 		{
 			var result = new ImportCardsResult();
+			var writes = new List<WriteModel<Cards>>();
 			var seen = new HashSet<string>(StringComparer.Ordinal);
 
 			for (int start = 0; ;)
@@ -177,12 +178,13 @@ namespace SteamCards.Services
 						CreatedAtUtc = DateTime.UtcNow
 					};
 
-					await _cards.ReplaceOneAsync(
-						c => c.MarketHashName == marketHashName,
-						card,
-						new ReplaceOptions { IsUpsert = true },
-						cancellationToken
-					);
+					writes.Add(new ReplaceOneModel<Cards>(
+						Builders<Cards>.Filter.Eq(c => c.MarketHashName, marketHashName),
+						card
+					)
+					{
+						IsUpsert = true
+					});
 
 					if (isFoil)
 						result.FoilImported++;
@@ -197,6 +199,9 @@ namespace SteamCards.Services
 
 				await Task.Delay(Random.Shared.Next(1000, 2000), cancellationToken);
 			}
+
+			if (writes.Count > 0)
+				await _cards.BulkWriteAsync(writes, cancellationToken: cancellationToken);
 
 			return result;
 		}
