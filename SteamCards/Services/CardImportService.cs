@@ -17,6 +17,30 @@ namespace SteamCards.Services
 			_cards = database.GetCollection<Cards>("cards");
 		}
 
+		private static readonly SemaphoreSlim SteamRequestGate = new (1, 1);
+		private static DateTime _nextSteamRequestAtUtc = DateTime.MinValue;
+
+		private async Task<HttpResponseMessage> GetSteamAsync(string url, CancellationToken ct)
+		{
+			await SteamRequestGate.WaitAsync(ct);
+
+			try
+			{
+				var delay = _nextSteamRequestAtUtc - DateTime.UtcNow;
+				if (delay > TimeSpan.Zero)
+					await Task.Delay(delay, ct);
+
+				var resp = await _httpClient.GetAsync(url, ct);
+
+				_nextSteamRequestAtUtc = DateTime.UtcNow.AddMicroseconds(
+					Random.Shared.Next(2500, 5000)
+				);
+
+				return resp;
+			}
+			finally { SteamRequestGate.Release(); }
+		}
+
 		//private static decimal? ParsePrice(string? priceText)
 		//{
 		//	if (string.IsNullOrWhiteSpace(priceText))
@@ -86,7 +110,7 @@ namespace SteamCards.Services
 					cardBorderFilter +
 					$"&q=&l=english";
 
-				using var resp = await _httpClient.GetAsync(url, cancellationToken);
+				using var resp = await GetSteamAsync(url, cancellationToken);
 
 				var body = await resp.Content.ReadAsStringAsync(cancellationToken);
 
@@ -196,8 +220,6 @@ namespace SteamCards.Services
 					await _cards.BulkWriteAsync(writes, cancellationToken: cancellationToken);
 
 				start += pageSize;
-
-				
 
 				if (start >= totalCount)
 					break;
