@@ -153,11 +153,6 @@ namespace SteamCards
 						}
 					}
 				);
-
-				if (Volatile.Read(ref throttled) == 1)
-				{
-					await Task.Delay(TimeSpan.FromMinutes(3), stoppingToken);
-				}
 			}
 		}
 	}
