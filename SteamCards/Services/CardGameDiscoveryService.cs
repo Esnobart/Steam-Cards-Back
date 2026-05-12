@@ -55,7 +55,7 @@ namespace SteamCards.Services
 				foreach (Match match in Regex.Matches(html, "data-ds-appid=\"(?<ids>\\d+)\""))
 				{
 					foreach (var rawId in match.Groups["ids"].Value.Split(','))
-						{
+					{
 						if (int.TryParse(rawId, out var id))
 							appIds.Add(id);
 					}
@@ -64,7 +64,7 @@ namespace SteamCards.Services
 				steamTotal = total;
 				pages++;
 
-				if (start + 100 > total) 
+				if (start + 100 > total)
 					break;
 
 				await Task.Delay(5000, ct);

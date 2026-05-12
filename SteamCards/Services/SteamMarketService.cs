@@ -25,7 +25,7 @@ namespace SteamCards.Services
 
 			if (!resp.IsSuccessStatusCode)
 				return null;
-			
+
 			using var doc = JsonDocument.Parse(body);
 
 			if (!doc.RootElement.GetProperty("success").GetBoolean())

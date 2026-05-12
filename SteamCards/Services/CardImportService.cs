@@ -1,6 +1,7 @@
 ﻿using MongoDB.Driver;
+using SharpCompress.Writers;
 using SteamCards.Models;
-using System.Globalization;
+//using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -45,7 +46,7 @@ namespace SteamCards.Services
 		//		return null;
 
 		//	var body = await resp.Content.ReadAsStringAsync(cancellationToken);
-			
+
 		//	using var doc = JsonDocument.Parse(body);
 
 		//	if (!doc.RootElement.TryGetProperty("lowest_price", out var priceEl))
@@ -90,8 +91,11 @@ namespace SteamCards.Services
 
 				var body = await resp.Content.ReadAsStringAsync(cancellationToken);
 
-				if (!resp.IsSuccessStatusCode)
+				if ((int)resp.StatusCode is 429 or 403)
 					throw new SteamThrottledException((int)resp.StatusCode);
+
+				if (!resp.IsSuccessStatusCode)
+					throw new Exception($"Steam HTTP {(int)resp.StatusCode}");
 
 				using var doc = JsonDocument.Parse(body);
 				var root = doc.RootElement;
@@ -200,7 +204,7 @@ namespace SteamCards.Services
 				if (start >= totalCount)
 					break;
 
-				await Task.Delay(Random.Shared.Next(2000, 4000), cancellationToken);
+				await Task.Delay(Random.Shared.Next(1000, 2000), cancellationToken);
 			}
 
 			return result;

@@ -86,22 +86,23 @@ app.MapPost("/admin/games/discover-card-games", async (CardGameDiscoveryService 
 	var games = db.GetCollection<Games>("games");
 
 	var writes = appIds.Select(appId =>
-	    new UpdateOneModel<Games>(
+		new UpdateOneModel<Games>(
 			Builders<Games>.Filter.Eq(g => g.AppId, appId),
-		    Builders<Games>.Update
+			Builders<Games>.Update
 			  .Set(g => g.AppId, appId)
 			  .Set(g => g.HasTradableCards, true)
 			  .SetOnInsert(g => g.CardsImported, false)
 			  .SetOnInsert(g => g.Status, "cards_possible")
 			  .SetOnInsert(g => g.FailCount, 0)
-	    )
+		)
 		{ IsUpsert = true }
 	).ToList();
 
 	if (writes.Count > 0)
 		await games.BulkWriteAsync(writes, cancellationToken: ct);
 
-	return Results.Ok(new {
+	return Results.Ok(new
+	{
 		steamTotal = discoveryResult.SteamTotal,
 		discovered = discoveryResult.Discovered,
 		pages = discoveryResult.Pages,

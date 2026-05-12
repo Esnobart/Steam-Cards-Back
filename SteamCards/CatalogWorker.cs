@@ -18,12 +18,11 @@ namespace SteamCards
 			while (!stoppingToken.IsCancellationRequested)
 			{
 				using var scope = _sp.CreateScope();
-
 				var db = scope.ServiceProvider.GetRequiredService<IMongoDatabase>();
 				var importer = scope.ServiceProvider.GetRequiredService<CardImportService>();
 				var setBuilder = scope.ServiceProvider.GetRequiredService<SetCollectionService>();
-				var games = db.GetCollection<Games>("games");
 
+				var games = db.GetCollection<Games>("games");
 				var now = DateTime.UtcNow;
 
 				var filter = Builders<Games>.Filter.And(
@@ -32,7 +31,7 @@ namespace SteamCards
 						Builders<Games>.Filter.And(
 							Builders<Games>.Filter.Eq(g => g.Status, "market_throttled"),
 							Builders<Games>.Filter.Lte(g => g.NextRetryAtUtc, now)
-						),
+					    ),
 						Builders<Games>.Filter.And(
 							Builders<Games>.Filter.Eq(g => g.Status, "processing"),
 							Builders<Games>.Filter.Lte(g => g.NextRetryAtUtc, now)
@@ -52,9 +51,6 @@ namespace SteamCards
 
 				foreach (var g in batch)
 				{
-					if (stoppingToken.IsCancellationRequested)
-						break;
-
 					var throttleDelay = g.FailCount switch
 					{
 						0 => TimeSpan.FromMinutes(3),
@@ -84,12 +80,12 @@ namespace SteamCards
 							Console.WriteLine($"[MARKET] AppId {g.AppId} throttled: {ex.Message}");
 
 							await games.UpdateOneAsync(
-								x => x.AppId == g.AppId,
-								Builders<Games>.Update
-									.Inc(g => g.FailCount, 1)
-									.Set(g => g.Status, "market_throttled")
-									.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.Add(throttleDelay)),
-								cancellationToken: stoppingToken
+							x => x.AppId == g.AppId,
+							Builders<Games>.Update
+								.Inc(g => g.FailCount, 1)
+								.Set(g => g.Status, "market_throttled")
+								.Set(g => g.NextRetryAtUtc, DateTime.UtcNow.Add(throttleDelay)),
+							cancellationToken: stoppingToken
 							);
 
 							await Task.Delay(throttleDelay, stoppingToken);
@@ -126,7 +122,7 @@ namespace SteamCards
 						);
 
 						await setBuilder.BuildSetAsync(g.AppId);
-						await Task.Delay(Random.Shared.Next(2000, 4000), stoppingToken);
+						await Task.Delay(Random.Shared.Next(1000, 2000), stoppingToken);
 					}
 					catch (Exception ex)
 					{
@@ -141,7 +137,7 @@ namespace SteamCards
 							cancellationToken: stoppingToken
 						);
 
-						await Task.Delay(Random.Shared.Next(4000, 7000), stoppingToken);
+						await Task.Delay(Random.Shared.Next(3000, 5000), stoppingToken);
 					}
 				}
 			}
