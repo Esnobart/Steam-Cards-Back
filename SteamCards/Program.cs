@@ -122,6 +122,17 @@ app.MapPost("/admin/sets/{appId:int}", async (int appId, SetCollectionService se
 	return Results.Ok(sets);
 });
 
+app.MapGet("/collections", async (IMongoDatabase db, CancellationToken ct) => {
+	var games = db.GetCollection<Games>("games");
+
+	var res = await games
+		.Find(Builders<Games>.Filter.Empty)
+		.SortBy(x => x.AppId)
+		.ToListAsync(ct);
+
+	return Results.Ok(res);
+});
+
 
 app.MapFallback(() => Results.Json(new { message = "Route not found" }, statusCode: 404));
 
