@@ -122,11 +122,12 @@ app.MapPost("/admin/sets/{appId:int}", async (int appId, SetCollectionService se
 	return Results.Ok(sets);
 });
 
-app.MapGet("/collections", async (IMongoDatabase db, CancellationToken ct) => {
-	var games = db.GetCollection<Games>("games");
+app.MapGet("/collections", async (IMongoDatabase db, CancellationToken ct) =>
+{
+	var games = db.GetCollection<SetCollection>("sets");
 
 	var res = await games
-		.Find(Builders<Games>.Filter.Empty)
+		.Find(Builders<SetCollection>.Filter.Empty)
 		.SortBy(x => x.AppId)
 		.ToListAsync(ct);
 
