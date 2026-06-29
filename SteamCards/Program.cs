@@ -55,6 +55,7 @@ builder.Services.AddHttpClient<CardImportService>(client =>
 builder.Services.AddHostedService<CatalogWorker>();
 builder.Services.AddScoped<CardsService>();
 builder.Services.AddScoped<SetCollectionService>();
+builder.Services.AddSingleton<SteamWorkController>();
 
 
 var app = builder.Build();
@@ -79,8 +80,10 @@ app.MapGet("/", () => "SteamCards API running");
 
 app.MapGet("/health", () => Results.Ok("OK"));
 
-app.MapPost("/admin/games/discover-card-games", async (CardGameDiscoveryService discovery, IMongoDatabase db, CancellationToken ct) =>
+app.MapPost("/admin/games/discover-card-games", async (CardGameDiscoveryService discovery, SteamWorkController control, IMongoDatabase db, CancellationToken ct) =>
 {
+	using var steamCtrl = await control.EnterAsync(ct);
+
 	var discoveryResult = await discovery.DiscoveryService(ct);
 	var appIds = discoveryResult.AppIds;
 	var games = db.GetCollection<Games>("games");
@@ -109,9 +112,10 @@ app.MapPost("/admin/games/discover-card-games", async (CardGameDiscoveryService 
 	});
 });
 
-app.MapPost("/admin/cards/{appId:int}", async (int appId, bool? isFoil, CardImportService importer, SetCollectionService setBuilder, CancellationToken cancellationToken) =>
+app.MapPost("/admin/cards/{appId:int}", async (int appId, bool? isFoil, CardImportService importer, SetCollectionService setBuilder, SteamWorkController control, CancellationToken ct) =>
 {
-	var result = await importer.ImportForGameAsync(appId, isFoil, cancellationToken);
+	using var steamCtrl = await control.EnterAsync(ct);
+	var result = await importer.ImportForGameAsync(appId, isFoil, ct);
 	await setBuilder.BuildSetAsync(appId);
 	return Results.Ok(result);
 });

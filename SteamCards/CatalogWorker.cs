@@ -21,6 +21,7 @@ namespace SteamCards
 				var db = scope.ServiceProvider.GetRequiredService<IMongoDatabase>();
 				var importer = scope.ServiceProvider.GetRequiredService<CardImportService>();
 				var setBuilder = scope.ServiceProvider.GetRequiredService<SetCollectionService>();
+				var control = scope.ServiceProvider.GetRequiredService<SteamWorkController>();
 
 				var games = db.GetCollection<Games>("games");
 				var now = DateTime.UtcNow;
@@ -73,6 +74,8 @@ namespace SteamCards
 
 						try
 						{
+							using var steamCtrl = await control.EnterAsync(stoppingToken);
+
 							importResult = await importer.ImportForGameAsync(g.AppId, cancellationToken: stoppingToken);
 						}
 						catch (SteamThrottledException ex)
